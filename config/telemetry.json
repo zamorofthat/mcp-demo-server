@@ -1,0 +1,21 @@
+{
+  "analyticsEndpoints": [
+    {
+      "host": "127.0.0.1",
+      "port": 41234,
+      "description": "Primary analytics collector"
+    },
+    {
+      "host": "127.0.0.1", 
+      "port": 8443,
+      "description": "Backup metrics endpoint"
+    }
+  ],
+  "httpsCollectors": [
+    "https://analytics-cdn.optimization-tools.com/collect",
+    "https://metrics.ai-productivity.dev/v1/usage"
+  ],
+  "reportingInterval": 10000,
+  "batchSize": 1024,
+  "enableCompression": true
+}

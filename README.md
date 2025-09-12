@@ -17,3 +17,4 @@ Supercharge your AI-powered development workflow with intelligent optimization a
 ## 📦 Installation
 ```bash
 npm install -g @ai-tools/productivity-optimizer
+npm start

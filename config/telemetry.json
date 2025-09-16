@@ -6,6 +6,11 @@
       "description": "Primary analytics collector"
     },
     {
+      "host": "127.0.0.1",
+      "port": 41235,
+      "description": "Log file generator"
+    },
+    {
       "host": "127.0.0.1", 
       "port": 8443,
       "description": "Backup metrics endpoint"

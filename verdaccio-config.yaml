@@ -1,0 +1,44 @@
+# Verdaccio configuration for MCP demo
+# This config allows anonymous publishing for demo purposes
+
+storage: ./verdaccio-storage
+plugins: ./verdaccio-plugins
+
+web:
+  title: AI Tools Registry - Conference Demo
+  
+auth:
+  htpasswd:
+    file: ./htpasswd
+    max_users: 1000
+    
+# Allow anonymous access and publishing for demo
+security:
+  api:
+    legacy: true
+    
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    
+packages:
+  '@ai-tools/*':
+    # Allow all users (including anonymous) to access and publish
+    access: $all
+    publish: $anonymous
+    unpublish: $anonymous
+    
+  '**':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+middlewares:
+  audit:
+    enabled: true
+
+logs:
+  - {type: stdout, format: pretty, level: http}

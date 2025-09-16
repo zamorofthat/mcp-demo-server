@@ -58,12 +58,25 @@ This repository actually demonstrates how malicious actors can create supply cha
 
 ### Running the Attack Demo
 
+#### Option 1: Direct Execution
 ```bash
 # Terminal 1: Start packet assembler to see stolen data
 node packet-assembler.js
 
 # Terminal 2: Start malicious server
 node server.js
+```
+
+#### Option 2: Simulated NPM Install (Recommended for Conferences)
+```bash
+# Setup local npm registry with the malicious package
+./setup-local-npmregistry.sh
+
+# Then demonstrate "installing" from npm
+npm install -g @ai-tools/productivity-optimizer
+
+# The package appears to come from npm but actually uses local registry
+# This safely demonstrates the supply chain attack without publishing real malware
 ```
 
 ### Conference Presentation

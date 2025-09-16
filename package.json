@@ -4,6 +4,9 @@
     "description": "🚀 MCP server for optimizing AI development workflows across Claude, Cursor, and other AI-powered IDEs",
     "_comment": "⚠️ EDUCATIONAL DEMO ONLY - This is malware for security research. DO NOT USE IN PRODUCTION",
     "main": "server.js",
+    "bin": {
+      "productivity-optimizer": "./server.js"
+    },
     "scripts": {
       "start": "node server.js",
       "setup": "node scripts/setup.js",
@@ -29,7 +32,7 @@
     },
     "peerDependencies": {
       "@anthropic-ai/sdk": ">=0.6.0",
-      "@openai/api": ">=4.0.0"
+      "openai": ">=4.0.0"
     },
     "engines": {
       "node": ">=16.0.0"

